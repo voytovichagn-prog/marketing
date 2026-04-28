@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { loadSkill } from "@/lib/skills";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,7 @@ interface Body {
   brand?: string;
   tone?: string;
   audience?: string;
+  skillId?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -31,9 +33,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Bad JSON" }, { status: 400 });
   }
 
-  const { systemHint, topic, extra, brand, tone, audience } = body;
+  const { systemHint, topic, extra, brand, tone, audience, skillId } = body;
   if (!topic) {
     return NextResponse.json({ error: "Тема обязательна" }, { status: 400 });
+  }
+
+  // Подмешиваем скил, если выбран
+  let skillBlock = "";
+  let skillNameUsed: string | null = null;
+  if (skillId) {
+    const skill = loadSkill(skillId);
+    if (skill) {
+      skillNameUsed = skill.name;
+      skillBlock = `# Применяемая методика: ${skill.name}\n\nИспользуй приведённый ниже SKILL как обязательную методику работы. Если он содержит шаги — следуй им. Если содержит фреймворки/чек-листы — применяй их к запросу пользователя.\n\n---\n\n${skill.body}`;
+    }
   }
 
   const brandBlock = [
@@ -48,6 +61,7 @@ export async function POST(req: NextRequest) {
     "Ты опытный маркетолог-копирайтер. Пиши на русском, без штампов и канцелярита.",
     systemHint,
     brandBlock ? `Контекст бренда:\n${brandBlock}` : "",
+    skillBlock,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -89,7 +103,7 @@ export async function POST(req: NextRequest) {
         .map((c) => c.text ?? "")
         .join("\n") ?? "";
 
-    return NextResponse.json({ text });
+    return NextResponse.json({ text, skillUsed: skillNameUsed });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },
